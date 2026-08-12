@@ -19,36 +19,93 @@ const movies = [
 
 const server = createServer((request, response) => {
   const { url, method } = request;
-  const pathName = new URL(url, `http://${hostname}:${port}`);
+  const parsedUrl = new URL(url, `http://${hostname}:${port}`);
+  const pathName = parsedUrl.pathname;
   const segments = pathName.split("/");
-  const responseHeader = { "Content-Type": "application/json" };
+  const jsonResponseHeader = { "Content-Type": "application/json" };
+  const htmlResponseHeader = { "Content-Type": "text/html; charset=utf-8" };
   switch (method) {
     case "GET":
-      if (segments[1] === "movies") {
-        if (segments[2]) {
-          const parsedId = parseInt(segments[2]);
-          if (isNaN(parsedId)) {
-            response.writeHead(400, responseHeader);
-            response.end(JSON.stringify({ error: "Not Found!" }));
+      switch (segments[1]) {
+        case "":
+          let htmlContent = `<html><p>[`;
+          movies.forEach(
+            (movie) =>
+              (htmlContent += `{id:${movie.id}, title:${movie.title}, release_year:${movie.release_year}},`),
+          );
+          htmlContent += `]</p></html>`;
+          response.writeHead(200, htmlResponseHeader);
+          response.end(htmlContent);
+          break;
+        case "movies":
+          if (segments[2]) {
+            const parsedId = parseInt(segments[2]);
+            if (isNaN(parsedId)) {
+              response.writeHead(400, jsonResponseHeader);
+              response.end(JSON.stringify({ error: "Invalid Movie Id!" }));
+            } else {
+              const movie = movies.find((m) => m.id === parsedId);
+              if (!movie) {
+                response.writeHead(404, jsonResponseHeader);
+                response.end(JSON.stringify({ error: "Not Found!" }));
+              } else {
+                response.writeHead(200, jsonResponseHeader);
+                response.end(JSON.stringify(movie));
+              }
+            }
           } else {
-            response.writeHead(200, responseHeader);
-            response.end(JSON.stringify(movies[id]));
+            const searchParams = parsedUrl.searchParams;
+            switch (searchParams.size) {
+              case 0:
+                response.writeHead(200, jsonResponseHeader);
+                response.end(JSON.stringify(movies));
+                break;
+              case 1:
+                const year = parseInt(searchParams.get("year"));
+                const filtered = movies.find((m) => m.release_year == year);
+                if (!filtered) {
+                  response.writeHead(404, jsonResponseHeader);
+                  response.end(JSON.stringify({ error: "Not Found!" }));
+                } else {
+                  response.writeHead(200, jsonResponseHeader);
+                  response.end(JSON.stringify(filtered));
+                }
+                break;
+              default:
+                let body = [];
+                searchParams.forEach((value, key) => {
+                  const filtered = movies.find(
+                    (m) => m.release_year === parseInt(value),
+                  );
+                  filtered
+                    ? body.push(filtered)
+                    : body.push({ error: "Not Found!" });
+                });
+                if (body.length == 0) {
+                  response.writeHead(404, jsonResponseHeader);
+                  response.end(JSON.stringify({ error: "Not Found!" }));
+                } else {
+                  response.writeHead(200, jsonResponseHeader);
+                  response.end(JSON.stringify(body));
+                }
+                break;
+            }
           }
-        } else {
-          response.writeHead(200, responseHeader);
-          response.end(Array.toString(movies));
-        }
-      } else {
-        response.writeHead(404, responseHeader);
-        response.end(JSON.stringify({ error: "Not Found!" }));
+          break;
+        default:
+          response.writeHead(404, jsonResponseHeader);
+          response.end(JSON.stringify({ error: "Not Found!" }));
+          break;
       }
       break;
     case "POST":
-      response.writeHead(405, responseHeader);
+      response.writeHead(405, jsonResponseHeader);
       response.end(JSON.stringify({ error: "Method Not Allowed!" }));
       break;
     default:
-      return;
+      response.writeHead(405, jsonResponseHeader);
+      response.end(JSON.stringify({ error: "Method Not Allowed!" }));
+      break;
   }
 });
 
